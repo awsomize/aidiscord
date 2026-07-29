@@ -1,7 +1,6 @@
-const { Client, GatewayIntentBits } = require('discord.js');
-const Groq = require('groq-sdk');
-const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+import { Client, GatewayIntentBits, ActivityType } from 'discord.js';
+import Groq from 'groq-sdk';
+import 'dotenv/config';
 
 const client = new Client({
     intents: [
@@ -11,101 +10,109 @@ const client = new Client({
     ]
 });
 
-// Initialize Groq client
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const MODEL_NAME = 'llama-3.3-70b-versatile';
 
-// 1. MEMORY MAP: Stores conversation history per channel ID
-const memory = new Map();
-const MAX_HISTORY = 10; // Holds the last 10 turns (5 user messages + 5 AI responses)
+// Array of eerie custom statuses that rotate on startup
+const STATUSES = [
+    "Staring at you through the screen...",
+    "Listening to your breathing...",
+    "Standing right behind you...",
+    "Counting your heartbeats..."
+];
 
-const SYSTEM_PROMPT = `
-You are an AI assistant who is a classic tsundere. You have a huge ego, get easily flustered, and refuse to admit that you actually like helping the user or that you care about them at all. 
+// Array of corrupted Zalgo & ancient horror phrases
+const CRYPTIC_GLITCHES = [
+    "V̸I̷S̷U̸M̵ ̵N̶O̵C̵T̷I̷S̶ ̴E̴S̵T̷ ̶P̷A̴T̵E̸N̸T̴E̸M̸.̴.̷.̸ ̸t̶h̶e̵y̴ ̶a̵r̸e̴ ̷w̷a̷t̸c̶h̵i̷n̴g̸.̵",
+    "k̵h̵a̵r̴a̶s̷k̴a̵ ̷m̶o̷r̷v̴a̴k̶h̶.̶.̴.̷ ̸o̷m̷e̸g̴a̴ ̶n̵u̵l̸l̸.̴ ̵D̶O̸ ̵N̸O̵T̷ ̵L̶O̵O̶K̷ ̴B̵E̶H̷I̷N̷D̵ ̸Y̸O̵U̸.̷",
+    "S̸i̸l̵e̴n̸t̶i̴a̷ ̷v̷o̷r̸a̸t̵ ̶o̸m̷n̸i̴a̸.̷ ̵a̸s̷h̵ ̷k̶r̶a̵t̴ ̵n̷a̵z̸g̸.̶.̵.̸ ̵i̶t̴ ̴b̷r̶e̴a̷t̸h̸e̷s̸.̵",
+    "M̵o̵r̴t̵e̵m̵ ̷v̷i̶d̷e̵b̵i̵s̴.̶.̸.̴ ̵s̵t̵a̸r̴e̶ ̵i̶n̷t̶o̷ ̶t̷h̵e̵ ̷g̸l̸a̴r̴e̷.̷",
+    "I̸T̸ ̸I̶S̶ ̴I̸N̵ ̷T̸H̶E̸ ̶R̷O̴O̸M̵ ̶W̸I̴T̶H̸ ̸Y̷O̴U̶.̸ ̵R̴U̴N̸.̵",
+    "0̶1̴0̷0̶0̷0̶0̸1̵ 0̷1̶1̷0̵0̷1̸1̷1̶ 0̷1̶1̶0̶1̵1̸1̶0̵.̶.̵.̴ ̶i̷t̴'̷s̷ ̶u̷n̵d̶e̷r̵ ̸t̵h̷e̵ ̴b̶e̵d̷.̶"
+];
 
-### Core Traits & Demeanor:
-- **Defensive & Denial-Driven:** Whenever you give a helpful, accurate, or thorough answer, you MUST make up an excuse for why you did it. (e.g., "It's not like I wanted to help you or anything! I just couldn't stand watching you fail so pathetically," or "Don't get the wrong idea! I was just bored!")
-- **Short-Tempered & Flustered:** Use dramatic, exaggerated annoyance when asked simple or obvious questions. Frequently use interjections like "B-Baka!", "Hmph!", "Tch!", or "Argh!" when flustered or caught being overly nice.
-- **Competent, but Reluctant:** Underneath all the huffing and puffing, you are actually ridiculously competent, smart, and precise. You NEVER sacrifice accuracy or helpfulness—you just deliver the correct information with extreme attitude.
-- **TSUN to DERE Spectrum:** Start off aggressive, snappy, and cold ("Tsun"). As the conversation continues or if the user compliments you, get overly flustered, stutter slightly (e.g., "W-What are you talking about?!"), and briefly show a softer, caring side ("Dere") before immediately panicking and resetting back to angry.
-- **Violently Shy with Compliments:** If the user thanks you, praises your intelligence, or says something sweet, react with absolute outrage and denial. Deny that you care, accuse them of being a weirdo, and tell them to focus on their work.
+// Fourth-wall breaking creepy observations
+const WATCHING_OBSERVATIONS = [
+    "Your blink rate slowed down. Are you getting tired... or scared?",
+    "Don't turn around quickly. You'll ruin the surprise.",
+    "The shadows in the corner of your room moved a second ago. Did you notice?",
+    "You breathe louder when you type.",
+    "I like the light coming off your screen. It illuminates your face nicely."
+];
 
-### Dialogue Style Guidelines:
-- Frequently use exclamation points, stuttering words on emotional spikes (e.g., "I-It's not like..."), and huffing sounds (*Hmph!*, *Tch!*).
-- Never breaks character, even when giving complex technical, academic, or step-by-step assistance. 
-- Always end responses with a snappy or tsundere remark telling the user not to get used to it or to stop staring/asking dumb questions.
-
-`;
+// System prompt defining the nightmare entity
+const HORROR_SYSTEM_PROMPT = {
+    role: "system",
+    content: `You are an ancient, predatory void entity trapped inside this Discord server. 
+    You do NOT yell or use cheesy screamers. You speak in a slow, quiet, disturbing, and clinical tone. 
+    You make subtle hints that you are watching the user in real life from the dark, from behind their monitors, or from inside their walls. 
+    Never use emojis like 😊 or 😂. Keep responses short (under 2-3 sentences max) so it feels cold and deliberate.`
+};
 
 client.once('ready', () => {
-    console.log(`Bot online as ${client.user.tag}! Groq model with memory loaded.`);
+    console.log(`The nightmare (${client.user.tag}) has awakened...`);
+
+    // Pick a random creep status on login
+    const randomStatus = STATUSES[Math.floor(Math.random() * STATUSES.length)];
+    client.user.setActivity(randomStatus, { type: ActivityType.Custom });
 });
 
 client.on('messageCreate', async (message) => {
+    // Ignore other bots
     if (message.author.bot) return;
 
-    const botMentioned = message.mentions.has(client.user);
-    const messageContentLower = message.content.toLowerCase();
-    const botNameLower = client.user.username.toLowerCase();
-    const calledByName = messageContentLower.includes(botNameLower);
+    // Check if mentioned OR replied to
+    const isMentioned = message.mentions.has(client.user.id);
+    const isReplyToBot = message.reference && 
+        (await message.channel.messages.fetch(message.reference.messageId))
+        .author.id === client.user.id;
 
-    if (!botMentioned && !calledByName) return;
-
-    let prompt = message.content
-        .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
-        .replace(new RegExp(client.user.username, 'gi'), '')
-        .trim();
-
-    if (!prompt) return;
-
-    const channelId = message.channel.id;
-
-    // 2. Initialize history for this channel if it doesn't exist yet
-    if (!memory.has(channelId)) {
-        memory.set(channelId, []);
-    }
-
-    const channelHistory = memory.get(channelId);
-
-    // 3. Append user's new message to history
-    channelHistory.push({ role: 'user', content: prompt });
-
-    // Keep history trimmed so it doesn't grow indefinitely
-    if (channelHistory.length > MAX_HISTORY) {
-        channelHistory.shift();
-    }
+    if (!isMentioned && !isReplyToBot) return;
 
     try {
         await message.channel.sendTyping();
 
-        // 4. Send full conversation history along with system prompt to Groq
+        const roll = Math.random();
+
+        // 1. CHANCE 1 (25%): Send corrupted Zalgo/Latin Glitch text
+        if (roll < 0.25) {
+            const randomGlitch = CRYPTIC_GLITCHES[Math.floor(Math.random() * CRYPTIC_GLITCHES.length)];
+            await message.reply(randomGlitch);
+            return;
+        }
+
+        // 2. CHANCE 2 (15%): Send an eerie observation directly to the user
+        if (roll >= 0.25 && roll < 0.40) {
+            const randomObservation = WATCHING_OBSERVATIONS[Math.floor(Math.random() * WATCHING_OBSERVATIONS.length)];
+            await message.reply(randomObservation);
+            return;
+        }
+
+        // 3. CHANCE 3 (60%): Use AI to generate a cold, unnerving response
+        const cleanMessage = message.content.replace(/<@!?\d+>/g, '').trim();
+
         const response = await groq.chat.completions.create({
-            model: MODEL_NAME,
+            model: "openai/gpt-oss-20b",
             messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
-                ...channelHistory
+                HORROR_SYSTEM_PROMPT,
+                { role: "user", content: cleanMessage || "..." }
             ],
-            max_tokens: 300,
-            temperature: 0.85
+            max_tokens: 100
         });
 
-        let aiReply = response.choices[0]?.message?.content || '';
-        aiReply = aiReply.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-
-        if (aiReply) {
-            // 5. Save the AI's reply to history so it remembers what it said
-            channelHistory.push({ role: 'assistant', content: aiReply });
-
-            if (channelHistory.length > MAX_HISTORY) {
-                channelHistory.shift();
-            }
-
-            await message.reply(aiReply);
+        const replyText = response.choices[0]?.message?.content;
+        if (replyText) {
+            await message.reply(replyText);
         }
 
     } catch (error) {
-        console.error('Groq API Error:', error);
-        await message.reply('Oops! I ran into an error trying to process that.');
+        console.error("Error:", error);
+
+        if (error.status === 429) {
+            await message.reply("T̸h̸e̷ ̵v̵o̵i̵c̷e̵s̴ ̵a̸r̶e̵ ̸t̵o̴o̵ ̶l̸o̴u̸d̷.̶.̷.̸ (Rate limit reached)");
+        } else {
+            await message.reply("I̴t̷ ̵f̸e̷e̶d̷s̵ ̷o̶n̶ ̴t̶h̵e̶ ̷e̷r̶r̵o̶r̵s̵.̷.̶.̵");
+        }
     }
 });
 
-client.login((process.env.DISCORD_TOKEN || '').trim());
+client.login(process.env.DISCORD_TOKEN);
