@@ -60,7 +60,7 @@ client.on('messageCreate', async (message) => {
 
         // 15% CHANCE: Send random zalgo text
         // 85% CHANCE: Provide an actual smart, creepy answer
-        if (Math.random() < 0.15) {
+        if (Math.random() < 0.10) {
             const randomGlitch = CRYPTIC_GLITCHES[Math.floor(Math.random() * CRYPTIC_GLITCHES.length)];
             await message.reply(randomGlitch);
             return;
