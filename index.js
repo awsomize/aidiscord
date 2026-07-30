@@ -1,6 +1,22 @@
 import { Client, GatewayIntentBits, ActivityType } from "discord.js";
 import Groq from "groq-sdk";
 import "dotenv/config";
+import { EmbedBuilder } from 'discord.js';
+
+// Inside your messageCreate handler, replace message.reply(replyText) with:
+const horrorEmbed = new EmbedBuilder()
+    .setColor('#0a0003') // Pitch dark red/black hex color
+    .setAuthor({ 
+        name: 'DAVID BASZUCKI [CORRUPTED BUILD]', 
+        iconURL: client.user.displayAvatarURL() 
+    })
+    .setDescription(replyText)
+    .setFooter({ 
+        text: `Engine Sector #000 • ID: ${message.author.id.slice(-4)}` 
+    })
+    .setTimestamp();
+
+await message.reply({ embeds: [horrorEmbed] });
 
 const client = new Client({
   intents: [
